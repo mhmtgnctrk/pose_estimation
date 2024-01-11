@@ -56,5 +56,5 @@ def compare_poses(video_path, use_live_camera=True):
     cv2.destroyAllWindows()
 
 if __name__ == "__main__":
-    video_path = "path/to/video.mp4"
+    video_path = "source video/ornekvideo.mp4"
     compare_poses(video_path, use_live_camera=True)
