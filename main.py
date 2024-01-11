@@ -1,7 +1,7 @@
-import mediapipe as mp
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
 import cv2
+import mediapipe as mp
 
 mp_pose = mp.solutions.pose
 
@@ -30,6 +30,7 @@ def compare_poses(video_path, use_live_camera=True):
                 ret2, frame2 = cap2.read()
 
             if not ret1 or not ret2:
+                print("Error reading frames.")
                 break
 
             landmarks1 = detect_pose(frame1, pose)
@@ -49,6 +50,7 @@ def compare_poses(video_path, use_live_camera=True):
             cv2.imshow("Video 2", frame2)
 
             if cv2.waitKey(1) & 0xFF == ord('q'):
+                print("Exiting the loop.")
                 break
 
     cap1.release()
@@ -56,5 +58,6 @@ def compare_poses(video_path, use_live_camera=True):
     cv2.destroyAllWindows()
 
 if __name__ == "__main__":
-    video_path = "source video/ornekvideo.mp4"
+    video_path = "path/to/video.mp4"
     compare_poses(video_path, use_live_camera=True)
+
