@@ -64,9 +64,7 @@ def compare_poses(video_path, use_live_camera=True):
                 ret_live, frame_live = cap_live.read()
 
             if not ret_reference or not ret_live:
-                if not ret_live:
-                    print("live")
-                print("Error reading frames.")
+                print("Error reading frames")
                 break
 
             landmarks_reference = detect_pose(frame_reference, pose)
@@ -124,7 +122,6 @@ def compare_poses(video_path, use_live_camera=True):
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 print("Exiting the loop.")
                 break
-
     cap_reference.release()
     cap_live.release()
     cv2.destroyAllWindows()
