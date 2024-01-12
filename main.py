@@ -64,6 +64,8 @@ def compare_poses(video_path, use_live_camera=True):
                 ret_live, frame_live = cap_live.read()
 
             if not ret_reference or not ret_live:
+                if not ret_live:
+                    print("live")
                 print("Error reading frames.")
                 break
 
@@ -128,5 +130,5 @@ def compare_poses(video_path, use_live_camera=True):
     cv2.destroyAllWindows()
 
 if __name__ == "__main__":
-    video_path = "C:\git_projects\pose_estimation\source_video\ornekvideo.mp4"
+    video_path = "source_video\ornekvideo.mp4"
     compare_poses(video_path, use_live_camera=True)
