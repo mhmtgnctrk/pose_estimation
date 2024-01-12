@@ -64,7 +64,7 @@ def compare_poses(video_path, use_live_camera=True):
                 ret_live, frame_live = cap_live.read()
 
             if not ret_reference or not ret_live:
-                print("Error reading frames")
+                print("Error reading frames.")
                 break
 
             landmarks_reference = detect_pose(frame_reference, pose)
@@ -108,7 +108,7 @@ def compare_poses(video_path, use_live_camera=True):
                 landmark_color = color_gradient(score)
 
                 # Draw the live landmark with gradient color
-                draw_landmark(frame_live, landmark, color=landmark_color)
+                draw_landmark(frame_live, landmark, color=landmark_color) 
 
             # Calculate overall score as the average of individual scores
             overall_score = total_score / len(landmarks_reference.landmark)
@@ -122,10 +122,11 @@ def compare_poses(video_path, use_live_camera=True):
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 print("Exiting the loop.")
                 break
+
     cap_reference.release()
     cap_live.release()
     cv2.destroyAllWindows()
 
 if __name__ == "__main__":
-    video_path = "source_video\ornekvideo.mp4"
+    video_path = "source_video/ornekvideo.mp4"
     compare_poses(video_path, use_live_camera=True)
