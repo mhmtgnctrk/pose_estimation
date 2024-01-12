@@ -8,20 +8,39 @@ def detect_pose(image, pose):
     results = pose.process(image)
     return results.pose_landmarks
 
-def draw_landmark(frame, landmark, color=(0, 255, 0)):
-    if landmark:
+def draw_landmark(frame, x, y, color=(0, 255, 0)):
+    if x and y:
         height, width, _ = frame.shape
-        cx, cy = int(landmark.x * width), int(landmark.y * height)
+        cx, cy = int(x * width), int(y * height)
         cv2.circle(frame, (cx, cy), 5, color, -1)  # Draw a circle at the landmark
+
+def apply_ema_filter(current_landmarks, previous_landmarks, alpha=0.6):
+    if previous_landmarks is None:
+        return current_landmarks
+
+    filtered_landmarks = []
+
+    for current, previous in zip(current_landmarks, previous_landmarks):
+        current_x, current_y = current
+        previous_x, previous_y = previous
+
+        # Apply EMA filter to x and y coordinates separately
+        filtered_x = alpha * current_x + (1 - alpha) * previous_x
+        filtered_y = alpha * current_y + (1 - alpha) * previous_y
+
+        filtered_landmarks.append((filtered_x, filtered_y))
+
+
+    return filtered_landmarks
 
 def calculate_distance_ratio(landmarks, nose_landmark, shoulder_landmarks):
     if landmarks and nose_landmark and shoulder_landmarks:
-        shoulder_span_distance = np.linalg.norm([shoulder_landmarks[0].x - shoulder_landmarks[1].x, shoulder_landmarks[0].y - shoulder_landmarks[1].y])
+        shoulder_span_distance = np.linalg.norm([shoulder_landmarks[0][0] - shoulder_landmarks[1][0], shoulder_landmarks[0][1] - shoulder_landmarks[1][1]])
         distance_ratios = []
 
-        for landmark in landmarks.landmark:
+        for landmark in landmarks:
             # Calculate the distance from the landmark to the nose
-            distance_nose = np.linalg.norm([landmark.x - nose_landmark.x, landmark.y - nose_landmark.y])
+            distance_nose = np.linalg.norm([landmark[0] - nose_landmark[0], landmark[1] - nose_landmark[1]])
 
             # Calculate the distance ratio using shoulder span distance as the denominator
             ratio = distance_nose / shoulder_span_distance
@@ -52,6 +71,9 @@ def compare_poses(video_path, use_live_camera=True):
         cap_live = cv2.VideoCapture(video_path)
 
     reference_landmarks = None  # Store reference landmarks from the first frame of the reference video
+    previous_live_landmarks = None
+    previous_ref_landmarks = None
+    overall_scores=None
 
     with mp_pose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5) as pose:
         while cap_reference.isOpened() and cap_live.isOpened():
@@ -61,7 +83,7 @@ def compare_poses(video_path, use_live_camera=True):
             if use_live_camera:
                 ret_live, frame_live = cap_live.read()
             else:
-                ret_live, frame_live = cap_live.read()
+                ret_live, frame_live = cap_reference.read()
 
             if not ret_reference or not ret_live:
                 print("Error reading frames.")
@@ -77,30 +99,45 @@ def compare_poses(video_path, use_live_camera=True):
             if reference_landmarks is None:
                 # Store reference landmarks from the first frame of the reference video
                 reference_landmarks = landmarks_reference
+                
+            #Apply EMA fılter
+            landmarks_live_smoothed = apply_ema_filter(
+                [(landmark.x, landmark.y) for landmark in landmarks_live.landmark],
+                previous_live_landmarks
+            )
+            reference_landmarks_smoothed = apply_ema_filter(
+                [(landmark.x, landmark.y) for landmark in landmarks_reference.landmark],
+                previous_ref_landmarks
+            )
 
             total_score = 0  # Initialize total score for all landmarks
 
-            for i, landmark in enumerate(landmarks_reference.landmark):
+            for i, landmark in enumerate(reference_landmarks_smoothed):
                 # Draw each reference landmark in green
-                draw_landmark(frame_reference, landmark, color=(0, 255, 0))
+                draw_landmark(frame_reference, landmark[0], landmark[1], color=(0, 255, 0))
 
-            for i, landmark in enumerate(landmarks_live.landmark):
-                # Extract nose and shoulder landmarks for the live video
-                nose_landmark_live = landmarks_live.landmark[mp_pose.PoseLandmark.NOSE]
-                shoulder_landmarks_live = [landmarks_live.landmark[mp_pose.PoseLandmark.LEFT_SHOULDER], landmarks_live.landmark[mp_pose.PoseLandmark.RIGHT_SHOULDER]]
+            # Extract nose and shoulder landmarks for the live video
+            nose_landmark_live = [landmarks_live_smoothed[0][0], 
+                                    landmarks_live_smoothed[0][1]]
+            shoulder_landmarks_live = [[landmarks_live_smoothed[12][0], landmarks_live_smoothed[12][1]],
+                                        [landmarks_live_smoothed[11][0], landmarks_live_smoothed[11][1]]]
 
-                # Extract nose and shoulder landmarks for the reference video
-                nose_landmark_ref = reference_landmarks.landmark[mp_pose.PoseLandmark.NOSE]
-                shoulder_landmarks_ref = [reference_landmarks.landmark[mp_pose.PoseLandmark.LEFT_SHOULDER], reference_landmarks.landmark[mp_pose.PoseLandmark.RIGHT_SHOULDER]]
+            # Extract nose and shoulder landmarks for the reference video
+            nose_landmark_ref = [reference_landmarks_smoothed[0][0], 
+                                    reference_landmarks_smoothed[0][1]]
+            shoulder_landmarks_ref = [[reference_landmarks_smoothed[12][0], reference_landmarks_smoothed[12][1]],
+                                        [reference_landmarks_smoothed[11][0], reference_landmarks_smoothed[11][1]]]
 
-                # Calculate distance ratio for the live landmark
-                distance_ratio_live = calculate_distance_ratio(landmarks_live, nose_landmark_live, shoulder_landmarks_live)[i]
-
-                # Calculate distance ratio for the reference landmark
-                distance_ratio_reference = calculate_distance_ratio(reference_landmarks, nose_landmark_ref, shoulder_landmarks_ref)[i]
+            # Calculate distance ratio for the live landmark
+            distance_ratios_live = calculate_distance_ratio(landmarks_live_smoothed, nose_landmark_live, shoulder_landmarks_live)
+            
+            # Calculate distance ratio for the reference landmark
+            distance_ratios_reference = calculate_distance_ratio(reference_landmarks_smoothed, nose_landmark_ref, shoulder_landmarks_ref)
+            
+            for i, landmark in enumerate(landmarks_live_smoothed):
 
                 # Calculate the similarity score for the landmark
-                score = calculate_similarity_score(distance_ratio_live, distance_ratio_reference)
+                score = calculate_similarity_score(distance_ratios_live[i], distance_ratios_reference[i])
 
                 total_score += score  # Add individual scores to the total
 
@@ -108,17 +145,20 @@ def compare_poses(video_path, use_live_camera=True):
                 landmark_color = color_gradient(score)
 
                 # Draw the live landmark with gradient color
-                draw_landmark(frame_live, landmark, color=landmark_color) 
+                draw_landmark(frame_live, landmark[0], landmark[1], color=landmark_color) 
 
             # Calculate overall score as the average of individual scores
             overall_score = total_score / len(landmarks_reference.landmark)
+            overall_scores.append([overall_score,cap_reference.get(cv2.CAP_PROP_POS_MSEC)*1000])
+            score_color = color_gradient(overall_score)
 
             # Display the overall score on the top right corner of the live video
-            cv2.putText(frame_live, f"Overall Score: {overall_score:.2f}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
+            cv2.putText(frame_live, f"Overall Score: {overall_score*100:.0f}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, score_color, 5, cv2.LINE_AA)
 
             cv2.imshow("Reference Video", frame_reference)
             cv2.imshow("Live Video", frame_live)
-
+            previous_ref_landmarks = reference_landmarks_smoothed
+            previous_live_landmarks = landmarks_live_smoothed
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 print("Exiting the loop.")
                 break
