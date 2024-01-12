@@ -64,7 +64,7 @@ def compare_poses(video_path, use_live_camera=True):
                 ret_live, frame_live = cap_live.read()
 
             if not ret_reference or not ret_live:
-                print("Error reading frames")
+                print("Error reading frames.")
                 break
 
             landmarks_reference = detect_pose(frame_reference, pose)
